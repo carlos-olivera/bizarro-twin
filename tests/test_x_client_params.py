@@ -27,8 +27,8 @@ class FakeAttachmentClient:
     def __init__(self, *args, **kwargs):
         self.called = None
 
-    async def create_tweet(self, text, attachment_url):
-        self.called = ("attachment_url", attachment_url, text)
+    async def create_tweet(self, text):
+        self.called = ("text_only", None, text)
         return {"text": text}
 
 
@@ -71,8 +71,9 @@ async def test_quote_fallback_to_attachment_url(monkeypatch):
     monkeypatch.setattr(x_mod, "Client", FakeAttachmentClient)
     bot = x_mod.XClient()
     await bot._create_with_quote("hola", "123")
-    assert bot.client.called[0] == "attachment_url"
-    assert "123" in bot.client.called[1]
+    # Fallback ahora concatena URL en texto, sin attachment_url
+    assert bot.client.called[0] == "text_only"
+    assert "123" in bot.client.called[2]
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,11 @@ TARGET_HOST = os.getenv("X_USERNAME") # El usuario al que hacemos "Sombra"
 CHECK_INTERVAL_MIN = int(os.getenv("CHECK_INTERVAL_MIN", 300))
 CHECK_INTERVAL_MAX = int(os.getenv("CHECK_INTERVAL_MAX", 900))
 
+def log(msg: str):
+    """Log con timestamp ISO para seguimiento explícito."""
+    now_str = datetime.now().isoformat()
+    print(f"[{now_str}] {msg}")
+
 def interaction_exists(tweet_id: str) -> bool:
     """Verifica si ya reaccionamos a un tweet específico."""
     if not tweet_id:
@@ -67,8 +72,42 @@ def extract_text(tweet) -> str:
         return tweet.get("text", "")
     return str(tweet)
 
+def extract_tweet_id(tweet) -> str | None:
+    """
+    Intenta obtener el ID del tweet asociado.
+    Compatible con notificaciones de Twikit que no usan 'id' directamente.
+    """
+    if tweet is None:
+        return None
+    candidates = [
+        "id",
+        "tweet_id",
+        "status_id",
+        "target_status_id",
+        "conversation_id",
+    ]
+    for attr in candidates:
+        if hasattr(tweet, attr):
+            val = getattr(tweet, attr, None)
+            if val:
+                return str(val)
+        if isinstance(tweet, dict) and attr in tweet and tweet[attr]:
+            return str(tweet[attr])
+    # Algunos objetos encapsulan el tweet en otro atributo
+    for nested in ["tweet", "status"]:
+        if hasattr(tweet, nested):
+            nested_obj = getattr(tweet, nested)
+            nested_id = extract_tweet_id(nested_obj)
+            if nested_id:
+                return nested_id
+        if isinstance(tweet, dict) and nested in tweet:
+            nested_id = extract_tweet_id(tweet[nested])
+            if nested_id:
+                return nested_id
+    return None
+
 async def run_autonomy_cycle():
-    print(f"\n🌀 --- INICIANDO CICLO DE AUTONOMÍA ---")
+    log(f"\n🌀 --- INICIANDO CICLO DE AUTONOMÍA ---")
     
     # ---------------------------------------------------------
     # 1. PERCEPCIÓN: Obtener contexto (host, menciones, daily)
@@ -78,25 +117,31 @@ async def run_autonomy_cycle():
     # Host: buscar último tweet no respondido
     host_tweet = None
     try:
-        print(f"👁️ Escaneando perfil de @{TARGET_HOST}...")
+        log(f"👁️ Escaneando perfil de @{TARGET_HOST}...")
         tweets = await x_bot.client.search_tweet(f"from:{TARGET_HOST}", product="Latest")
         if tweets:
             candidate = tweets[0]
-            if not interaction_exists(getattr(candidate, "id", None)):
+            cid = extract_tweet_id(candidate)
+            if not interaction_exists(cid):
                 host_tweet = candidate
+            log(f"🔍 Host candidato id={cid}, texto='{extract_text(candidate)[:80]}'")
     except Exception as e:
-        print(f"❌ Error leyendo X (host): {e}")
+        log(f"❌ Error leyendo X (host): {e}")
 
     # Menciones: obtener notificaciones y filtrar no respondidas
     mentions = []
     try:
         notifications = await x_bot.get_my_latest_mentions(limit=10)
         for n in notifications:
-            tid = getattr(n, "id", None)
+            tid = extract_tweet_id(n)
+            log(f"🔔 Notificación recibida raw={n}")
             if tid and not interaction_exists(tid):
                 mentions.append(n)
+                log(f"✅ Mención candidata id={tid}, texto='{extract_text(n)[:80]}'")
+            else:
+                log(f"⏭️ Notificación ignorada id={tid}")
     except Exception as e:
-        print(f"⚠️ Error obteniendo menciones: {e}")
+        log(f"⚠️ Error obteniendo menciones: {e}")
 
     allow_daily = last_daily_post_date() != now.date()
 
@@ -108,25 +153,26 @@ async def run_autonomy_cycle():
     )
 
     if not plan:
-        print("💤 Sin acciones pendientes en este ciclo.")
+        log("💤 Sin acciones pendientes en este ciclo.")
         return
 
     target_text = extract_text(plan.target_tweet) if plan.target_tweet else plan.target_text
-    target_id = getattr(plan.target_tweet, "id", None) if plan.target_tweet else None
+    target_id = extract_tweet_id(plan.target_tweet) if plan.target_tweet else None
+    log(f"🎬 Plan seleccionado: tipo={plan.action_type}, should_quote={plan.should_quote}, target_id={target_id}, motivo='{plan.reason}'")
 
     # ---------------------------------------------------------
     # 2. ESTADO INTERNO: Consultar Mood y RAG
     # ---------------------------------------------------------
     current_mood = mood_engine.get_current_mood()
-    print(f"🌡️ Mood Actual: {current_mood['description']} (V:{current_mood['valence']}, A:{current_mood['arousal']})")
+    log(f"🌡️ Mood Actual: {current_mood['description']} (V:{current_mood['valence']}, A:{current_mood['arousal']})")
 
     relevant_memories = memory_service.retrieve_context(target_text)
-    print(f"📚 Recuerdos recuperados: {len(relevant_memories)}")
+    log(f"📚 Recuerdos recuperados: {len(relevant_memories)}")
     
     # ---------------------------------------------------------
     # 3. COGNICIÓN: Generar Inversión Bizarra con DeepSeek
     # ---------------------------------------------------------
-    print(f"🧠 Pensando respuesta invertida ({plan.reason})...")
+    log(f"🧠 Pensando respuesta invertida ({plan.reason})...")
     decision = brain.generate_bizarro_thought(
         target_tweet=target_text,
         mood_context=f"Estado: {current_mood['description']}",
@@ -134,17 +180,17 @@ async def run_autonomy_cycle():
     )
 
     if not decision:
-        print("❌ El cerebro no produjo respuesta (JSON inválido o error API).")
+        log("❌ El cerebro no produjo respuesta (JSON inválido o error API).")
         return
 
     final_content = decision.get('tweet_content')
     thought_process = decision.get('thought_process')
     
-    print(f"💡 Pensamiento: {thought_process}")
-    print(f"🗣️ Decisión: {final_content}")
+    log(f"💡 Pensamiento: {thought_process}")
+    log(f"🗣️ Decisión: {final_content}")
 
     if not final_content or len(final_content) > 280:
-        print("⚠️ Tweet inválido (vacío o muy largo). Abortando.")
+        log("⚠️ Tweet inválido (vacío o muy largo). Abortando.")
         return
 
     # ---------------------------------------------------------
@@ -153,17 +199,17 @@ async def run_autonomy_cycle():
     action_log_type = "daily_post" if plan.action_type == "daily" else "shadow_quote" if plan.should_quote else "shadow_reply"
     try:
         if plan.action_type == "daily":
-            print("🗓️ Publicando DAILY POST")
+            log("🗓️ Publicando DAILY POST")
             await x_bot.post_tweet(final_content)
         else:
             if plan.should_quote:
-                print("🎲 Decisión: Publicar como QUOTE TWEET")
+                log(f"🎲 Decisión: Publicar como QUOTE TWEET a target_id={target_id}")
                 await x_bot.post_tweet(final_content, quote_to_id=target_id)
             else:
-                print("🎲 Decisión: Publicar como RESPUESTA (REPLY)")
+                log(f"🎲 Decisión: Publicar como RESPUESTA (REPLY) a target_id={target_id}")
                 await x_bot.post_tweet(final_content, reply_to_id=target_id)
             
-        print("🚀 TWEET PUBLICADO EXITOSAMENTE")
+        log("🚀 TWEET PUBLICADO EXITOSAMENTE")
         
         # ---------------------------------------------------------
         # 5. PERSISTENCIA: Guardar Log y Actualizar Mood
@@ -202,16 +248,16 @@ async def run_autonomy_cycle():
             )
             
             session_save.commit()
-            print("💾 Persistencia completada correctamente.")
+            log(f"💾 Persistencia completada correctamente. Última acción={action_log_type}, target_id={target_id or 'daily_post'}")
             
         except Exception as db_e:
-            print(f"❌ Error guardando en DB: {db_e}")
+            log(f"❌ Error guardando en DB: {db_e}")
             session_save.rollback()
         finally:
             session_save.close()
         
     except Exception as e:
-        print(f"❌ Error crítico en fase de Acción/Persistencia: {type(e).__name__}: {e}")
+        log(f"❌ Error crítico en fase de Acción/Persistencia: {type(e).__name__}: {e}")
         traceback.print_exc()
 
 async def main_loop():
@@ -236,8 +282,9 @@ async def main_loop():
         
         # Dormir aleatoriamente
         sleep_time = random.randint(CHECK_INTERVAL_MIN, CHECK_INTERVAL_MAX)
-        next_run = time.strftime('%H:%M:%S', time.localtime(time.time() + sleep_time))
-        print(f"💤 Durmiendo {sleep_time} segundos (próximo ciclo: {next_run})...")
+        next_run_ts = time.time() + sleep_time
+        next_run_local = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(next_run_ts))
+        log(f"💤 Durmiendo {sleep_time} segundos (próximo ciclo local: {next_run_local})...")
         await asyncio.sleep(sleep_time)
 
 if __name__ == "__main__":
