@@ -16,3 +16,6 @@ logs/*
 # IDEs
 .vscode/
 .idea/
+
+# Prompts sensibles (no versionar)
+config/system_prompt.txt
