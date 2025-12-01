@@ -1,0 +1,18 @@
+# requirements.txt
+
+# Base de Datos & ORM
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+pgvector>=0.2.0  # Cliente python para vectores
+
+# Inteligencia Artificial (DeepSeek es compatible con cliente OpenAI)
+openai>=1.0.0
+tiktoken>=0.5.0
+
+# Interfaz X (Twitter)
+twikit>=2.1.0
+
+# Utilidades y Configuración
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+tenacity>=8.2.0  # Para reintentos automáticos en fallos de red

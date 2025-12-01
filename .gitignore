@@ -1,0 +1,18 @@
+# .gitignore
+# Entorno virtual
+venv/
+__pycache__/
+*.pyc
+
+# Variables de entorno y secretos
+.env
+.env.local
+
+# Datos sensibles del Bot
+data/cookies/*.json
+data/*.db
+logs/*
+
+# IDEs
+.vscode/
+.idea/
