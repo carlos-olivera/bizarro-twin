@@ -16,3 +16,7 @@ twikit>=2.1.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
 tenacity>=8.2.0  # Para reintentos automáticos en fallos de red
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0

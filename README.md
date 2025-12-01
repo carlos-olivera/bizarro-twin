@@ -69,6 +69,37 @@ Necesitas:
 - `DEEPSEEK_API_KEY`: Para el razonamiento.
 - `OPENAI_API_KEY`: Para los embeddings (memoria).
 - `X_USERNAME`: El usuario "Host" a imitar.
+- `SYSTEM_PROMPT_PATH` (opcional): Ruta al archivo con el prompt del Gemelo. Por defecto `config/system_prompt.txt`.
+
+**System Prompt (fuera del repo):**
+
+1. Crea el archivo `config/system_prompt.txt` (o la ruta que definas en `SYSTEM_PROMPT_PATH`) con el prompt base del bot. Este archivo está en `.gitignore` para evitar que se sincronice.
+2. Mantén el contenido en español y respeta los placeholders `{mood_context}` y `{rag_text}` para que el motor inserte estado y recuerdos dinámicamente.
+3. Razones para mantenerlo fuera de git:
+   - **OpSec:** Evita filtrar instrucciones anti-detención y detalles de personalidad.
+   - **Evolución controlada:** Permite ajustar la sombra sin tocar código ni ensuciar el histórico del repo.
+   - **Seguridad:** Minimiza riesgos si el repositorio se comparte o se hace público.
+
+### Lógica de Interacción (Máquina de Estados)
+
+- La lógica de decisiones vive en `src/modules/state_machine.py`.
+- Reglas actuales:
+- Responder al host cuando replica o hay tweet pendiente.
+- Post diario (una vez al día, antes de las 22:00) sin referencia externa.
+- Responder menciones de otros usuarios con el mismo tono/sarcasmo.
+- Si el tweet objetivo tiene >2 likes o >2 RTs, aumenta la probabilidad de responder como quote (70/30).
+- Reglas de descarte: ignora tweets con texto <40 caracteres; ignora tweets con media (imagen/video) cuando el texto <150 caracteres.
+- `main.py` delega en la máquina qué acción tomar y usa `x_client.post_tweet` para publicar (reply, quote o daily).
+
+### Pruebas y mediciones
+
+1) Instala dependencias de test: `pip install -r requirements.txt`
+2) Ejecuta toda la suite: `pytest -q`
+3) Casos cubiertos:
+   - `tests/test_state_machine.py`: reglas de quote vs reply según engagement, prioridades (host > daily > menciones) y restricción diaria antes de las 22:00.
+   - `tests/test_x_client_params.py`: compatibilidad de parámetros de Twikit (`quote_tweet_id`, `quote`, `attachment_url`, `reply_to`, `reply_to_tweet_id`).
+4) Para ver detalles: `pytest -vv tests/test_state_machine.py -k quote`
+5) Métricas rápidas: cuenta de tests y fallos en la salida de `pytest`; usa `-q` para modo conciso o `-vv` para más detalle.
 
 ### 4. Inyección de Cookies (Cirugía)
 
