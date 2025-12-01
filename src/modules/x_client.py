@@ -77,10 +77,7 @@ class XClient:
             return await self.client.create_tweet(text, quote_tweet_id=quote_to_id)
         if "quote" in params:
             return await self.client.create_tweet(text, quote=quote_to_id)
-        if "attachment_url" in params:
-            url = f"https://x.com/i/web/status/{quote_to_id}"
-            return await self.client.create_tweet(text, attachment_url=url)
-        # Último recurso: adjuntar la URL manualmente en el texto
+        # Último recurso: adjuntar la URL manualmente en el texto (sin attachment_url para evitar BadRequest)
         url = f"https://x.com/i/web/status/{quote_to_id}"
         return await self.client.create_tweet(f"{text} {url}")
 
@@ -96,14 +93,17 @@ class XClient:
         # Último recurso: menciona manualmente al usuario al responder
         return await self.client.create_tweet(text)
 
-    async def get_my_latest_mentions(self, limit=10):
-        """Obtiene menciones para el ciclo de respuesta."""
+    async def get_my_latest_mentions(self, limit=10, notif_type="all"):
+        """
+        Obtiene menciones para el ciclo de respuesta.
+        Twikit requiere el parámetro 'type' en get_notifications (ej. 'all', 'mention').
+        """
         if not self.user:
             await self.login()
         
         # Nota: Twikit recupera notificaciones, hay que filtrar menciones
         # Esta es una implementación simplificada para prueba
-        return await self.client.get_notifications(count=limit)
+        return await self.client.get_notifications(type=notif_type, count=limit)
 
 # Instancia global para importar en otros lados
 x_bot = XClient()
