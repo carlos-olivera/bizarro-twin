@@ -218,7 +218,7 @@ async def run_autonomy_cycle():
         session_save = next(session_gen_save)
         
         try:
-            log = InteractionLog(
+            interaction_log = InteractionLog(
                 tweet_id=target_id,
                 action_type=action_log_type,
                 input_context=target_text,
@@ -226,7 +226,7 @@ async def run_autonomy_cycle():
                 mood_state=current_mood,
                 reward_score=0.0 
             )
-            session_save.add(log)
+            session_save.add(interaction_log)
             
             delta_v = decision.get('new_valence_delta', 0)
             delta_a = decision.get('new_arousal_delta', 0)
