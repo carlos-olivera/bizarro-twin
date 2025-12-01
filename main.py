@@ -108,8 +108,7 @@ async def run_autonomy_cycle():
 
         if should_quote:
             print("🎲 Decisión Aleatoria: Publicar como QUOTE TWEET")
-            # CORRECCIÓN: Twikit 2.x usa 'quote' en lugar de 'quote_tweet_id'
-            await x_bot.client.create_tweet(final_content, quote=tweet_id)
+            await x_bot.post_tweet(final_content, quote_to_id=tweet_id)
             action_log_type = "shadow_quote"
         else:
             print("🎲 Decisión Aleatoria: Publicar como RESPUESTA (REPLY)")
