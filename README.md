@@ -69,6 +69,12 @@ Necesitas:
 - `DEEPSEEK_API_KEY`: Para el razonamiento.
 - `OPENAI_API_KEY`: Para los embeddings (memoria).
 - `X_USERNAME`: El usuario "Host" a imitar.
+- `SYSTEM_PROMPT_PATH` (opcional): Ruta al archivo con el prompt del Gemelo. Por defecto `config/system_prompt.txt`.
+
+**System Prompt (fuera del repo):**
+
+1. Crea el archivo `config/system_prompt.txt` (o la ruta que definas en `SYSTEM_PROMPT_PATH`) con el prompt base del bot. Este archivo está en `.gitignore` para evitar que se sincronice.
+2. Mantén el contenido en español y respeta los placeholders `{mood_context}` y `{rag_text}` para que el motor inserte estado y recuerdos dinámicamente.
 
 ### 4. Inyección de Cookies (Cirugía)
 

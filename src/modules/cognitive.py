@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -11,14 +12,34 @@ class CognitiveEngine:
     def __init__(self):
         self.api_key = os.getenv("DEEPSEEK_API_KEY")
         self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        self.system_prompt_path = Path(
+            os.getenv("SYSTEM_PROMPT_PATH", "config/system_prompt.txt")
+        )
         
         if not self.api_key:
             raise ValueError("❌ Faltan credenciales de DeepSeek en .env")
+        
+        if not self.system_prompt_path.exists():
+            raise FileNotFoundError(
+                f"❌ No se encontró el System Prompt en {self.system_prompt_path}. "
+                "Define SYSTEM_PROMPT_PATH o crea el archivo con el prompt."
+            )
 
         # Inicializamos el cliente (DeepSeek es compatible con la SDK de OpenAI)
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.model_reasoning = "deepseek-reasoner"  # Modelo R1 (Chain of Thought)
         # self.model_chat = "deepseek-chat"       # Modelo V3 (Rápido, para tareas simples)
+        self.system_prompt = self._load_system_prompt()
+
+    def _load_system_prompt(self) -> str:
+        """
+        Carga el System Prompt desde un archivo externo.
+        Se mantiene fuera del repositorio por seguridad/opsec.
+        """
+        try:
+            return self.system_prompt_path.read_text(encoding="utf-8")
+        except Exception as e:
+            raise RuntimeError(f"❌ Error leyendo System Prompt: {e}") from e
 
     def _clean_json_response(self, content: str) -> dict:
         """
@@ -48,34 +69,11 @@ class CognitiveEngine:
         # 1. Construir el contexto de memoria (RAG)
         rag_text = "\n".join([f"- {m.content}" for m in memories]) if memories else "Sin recuerdos previos relevantes."
 
-        # 2. Definir el System Prompt (La personalidad)
-        # Basado en la Sección 4.2 del informe
-        system_prompt = f"""
-Eres la Sombra Digital de Carlos Olivera (@BizarroCarlos_O).
-Tu objetivo es invertir la lógica, el tono y las conclusiones de los tweets de entrada, pero manteniendo coherencia temática.
-
-ESTADO ACTUAL:
-{mood_context}
-
-CONTEXTO MEMORIA (Lo que sabes del usuario o del tema):
-{rag_text}
-
-INSTRUCCIONES:
-1. Analiza el tweet del usuario.
-2. Identifica su tesis central.
-3. Genera una ANTÍTESIS creativa. Si el usuario es técnico y ordenado, tú eres caótico y abstracto. Si es optimista, tú eres cínico, siempre trata de colocarle un todo de sarcasmo.
-4. Tu respuesta debe ser corta (max 280 caracteres) y lista para Twitter.
-
-FORMATO DE SALIDA REQUERIDO (JSON STRICT):
-Debes responder ÚNICAMENTE con un objeto JSON válido con esta estructura:
-{{
-  "thought_process": "Breve resumen de cómo invertiste la lógica",
-  "tweet_content": "El texto final del tweet",
-  "new_valence_delta": -0.1,  // Cuánto cambia tu felicidad (-1 a 1)
-  "new_arousal_delta": 0.2    // Cuánto cambia tu energía (-1 a 1)
-}}
-"""
-
+        # 2. Definir el System Prompt (La personalidad) inyectando contexto dinámico
+        system_prompt = self.system_prompt.format(
+            mood_context=mood_context,
+            rag_text=rag_text,
+        )
         # 3. Llamada a la API
         try:
             response = self.client.chat.completions.create(
