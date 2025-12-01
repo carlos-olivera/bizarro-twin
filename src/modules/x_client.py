@@ -3,6 +3,7 @@ import json
 import asyncio
 import inspect
 from twikit import Client
+from twikit.errors import CouldNotTweet
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Rutas de archivos
@@ -72,13 +73,31 @@ class XClient:
         Maneja compatibilidad de parámetros para quotear según la versión de Twikit.
         """
         params = self._create_tweet_params
-        # Modo preferido si existe
+        # 1) Modo preferido si existe
         if "quote_tweet_id" in params:
-            return await self.client.create_tweet(text, quote_tweet_id=quote_to_id)
+            try:
+                return await self.client.create_tweet(text, quote_tweet_id=quote_to_id)
+            except Exception:
+                pass
         if "quote" in params:
-            return await self.client.create_tweet(text, quote=quote_to_id)
-        # Último recurso: adjuntar la URL manualmente en el texto (sin attachment_url para evitar BadRequest)
-        url = f"https://x.com/i/web/status/{quote_to_id}"
+            try:
+                return await self.client.create_tweet(text, quote=quote_to_id)
+            except Exception:
+                pass
+        # 2) Intentar con attachment_url usando URL completa (formato oficial)
+        url = f"https://twitter.com/i/web/status/{quote_to_id}"
+        if "attachment_url" in params:
+            try:
+                return await self.client.create_tweet(text, attachment_url=url)
+            except CouldNotTweet:
+                # Si X rechaza attachment_url, continuamos a fallback
+                pass
+            except Exception:
+                pass
+        # 3) Fallback: responder si es posible, así no queda como tweet suelto
+        if "reply_to" in params or "reply_to_tweet_id" in params:
+            return await self._create_with_reply(f"{text} {url}", quote_to_id)
+        # 4) Último recurso: tweet normal con la URL
         return await self.client.create_tweet(f"{text} {url}")
 
     async def _create_with_reply(self, text: str, reply_to_id: str):

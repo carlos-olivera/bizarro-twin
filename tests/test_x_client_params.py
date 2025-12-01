@@ -26,9 +26,12 @@ class FakeQuoteClient:
 class FakeAttachmentClient:
     def __init__(self, *args, **kwargs):
         self.called = None
+        self.fail = False
 
-    async def create_tweet(self, text):
-        self.called = ("text_only", None, text)
+    async def create_tweet(self, text, attachment_url=None):
+        if self.fail:
+            raise x_mod.CouldNotTweet("fail")
+        self.called = ("attachment_url", attachment_url, text)
         return {"text": text}
 
 
@@ -71,9 +74,20 @@ async def test_quote_fallback_to_attachment_url(monkeypatch):
     monkeypatch.setattr(x_mod, "Client", FakeAttachmentClient)
     bot = x_mod.XClient()
     await bot._create_with_quote("hola", "123")
-    # Fallback ahora concatena URL en texto, sin attachment_url
-    assert bot.client.called[0] == "text_only"
-    assert "123" in bot.client.called[2]
+    assert bot.client.called[0] == "attachment_url"
+    assert "123" in bot.client.called[1]
+
+
+@pytest.mark.asyncio
+async def test_quote_fallback_to_reply_when_attachment_fails(monkeypatch):
+    # Simula fallo en attachment_url para forzar reply/text fallback
+    monkeypatch.setattr(x_mod, "Client", FakeAttachmentClient)
+    bot = x_mod.XClient()
+    bot.client.fail = True
+    result = await bot._create_with_quote("hola", "123")
+    # Debe devolver tweet generado por _create_with_reply (reuse attachment_url client as reply target)
+    assert bot.client.called is None  # attachment_url falló
+    assert result  # No lanza excepción
 
 
 @pytest.mark.asyncio
