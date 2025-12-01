@@ -96,14 +96,17 @@ class XClient:
         # Último recurso: menciona manualmente al usuario al responder
         return await self.client.create_tweet(text)
 
-    async def get_my_latest_mentions(self, limit=10):
-        """Obtiene menciones para el ciclo de respuesta."""
+    async def get_my_latest_mentions(self, limit=10, notif_type="all"):
+        """
+        Obtiene menciones para el ciclo de respuesta.
+        Twikit requiere el parámetro 'type' en get_notifications (ej. 'all', 'mention').
+        """
         if not self.user:
             await self.login()
         
         # Nota: Twikit recupera notificaciones, hay que filtrar menciones
         # Esta es una implementación simplificada para prueba
-        return await self.client.get_notifications(count=limit)
+        return await self.client.get_notifications(type=notif_type, count=limit)
 
 # Instancia global para importar en otros lados
 x_bot = XClient()
